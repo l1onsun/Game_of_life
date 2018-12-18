@@ -1,13 +1,9 @@
 #include <iostream>
-//#include <pthread.h>
-//#include <string>
 #include <algorithm>
 #include <vector>
 #include <ctime>
 #include <atomic>
 #include <unistd.h>
-//#include <cstdlib>
-//#include <utility>
 
 class field {
  public:
@@ -109,6 +105,8 @@ class GameofLife {
         _stop();
       } else if (request == "run") {
         _run();
+      } else if (request == "pausestatus") {
+        std::cout << "pause: " << pause << std::endl;
       } else {
         std::cout << "unknown command" << std::endl;
         printhelp();
@@ -123,6 +121,9 @@ class GameofLife {
     std::cout << "input the num: ";
     std::cin >> num;
     box.add(num);
+    pthread_mutex_lock(&mutex);
+    pause = false;
+    pthread_mutex_unlock(&mutex);
     pthread_cond_broadcast(&stoped);
   }
 
@@ -152,18 +153,22 @@ class GameofLife {
     std::cin >> N >> M;
 
     init();
-    std::cout << "!";
+    //std::cout << "!";
     for (int i = 0; i < K; i++) {
       streams[i].run(i, this);
     }
   }
 
   void printhelp() {
-    std::cout << "hi" << std::endl;
+    std::cout << "supported commands:" << std::endl;
+    std::cout << "START" << std::endl;
+    std::cout << "STATUS" << std::endl;
+    std::cout << "QUIT" << std::endl;
+    std::cout << "STOP" << std::endl;
+    std::cout << "RUN" << std::endl;
   }
 
   void _status() {
-    //todo
     _stop();
     int min = -1;
     for(int i = 0; i < K; i++) {
@@ -171,7 +176,7 @@ class GameofLife {
         min = statuses[i];
       std::cout << statuses[i] << ' ';
     }
-    std::cout << std::endl;
+    std::cout << "miter: " << min << std::endl;
     for(int i = 0; i < N; i++) {
       for (int j = 0; j < M; j++)
         std::cout << box.layers[i][j][min];
@@ -205,10 +210,10 @@ class GameofLife {
       stream* self = (stream*) selfvoid;
       field f = self->base->fields[self->num];
       while(check(self)) {
-        std::cout << '#'  << self->num << std::endl;
+        //std::cout << '#'  << self->num << std::endl;
         while (self->base->statuses[self->num] >= self->base->box.maxiter.load()) usleep(100);
         std::cout << "start #" << self->num << " iter: " << self->base->statuses[self->num] << std::endl;
-        for (int i = f.a[1]; i < f.b[1]; i++)
+        for (int i = f.a[1]; i < f.b[1]; i++) {
           for (int j = f.a[0]; j < f.b[0]; j++) {
 
             int livecount = 0;
@@ -231,7 +236,10 @@ class GameofLife {
               else
                 self->base->box.layers[i][j].push_back(false);
             }
+            //std::cout << livecount; //debug
           }
+          //std::cout << std::endl; //debug
+        }
         self->base->statuses[self->num]++;
       }
       return 0;
@@ -248,8 +256,9 @@ class GameofLife {
     }
     static bool getcell(stream* self, int x, int y) {
       while (true) {
-        auto p = self->base->box(x - 1, y, self->base->statuses[self->num]);
+        auto p = self->base->box(x, y, self->base->statuses[self->num]);
         if (!p.first) {
+          usleep(100);
           continue;
         } else
           return p.second;
